@@ -4,7 +4,7 @@ An orchestrator for big coding tasks in **Claude Code** and **Cursor**.
 
 Give your agent a large task and it stops doing everything alone: it splits the work into units, decides how many workers to run (none, one, or up to 4 in parallel), hands each a short brief, and verifies the combined result before handing back.
 
-> Status: v0. It works, it is opinionated, and it has not been tuned on many real projects yet. Feedback and PRs welcome.
+> Status: v0.2 (unreleased, see [CHANGELOG.md](CHANGELOG.md)). It works, it is opinionated, and it has not been tuned on many real projects yet. Feedback and PRs welcome.
 
 ```mermaid
 flowchart LR
@@ -28,7 +28,19 @@ flowchart LR
 | `examples/project-skills/` | Two templates for per-project rules: waves per package, and verification commands |
 | `lean-ctx/` | Optional, recommended: [lean-ctx](https://github.com/yvgude/lean-ctx) setup that compresses reads and shell output, plus a locked-down shell so workers run safe commands without prompts and are refused the rest |
 | `tools/usage-report.py` | Token and model usage report from your local transcripts: tokens per model, cache hit rate, costliest projects and tools, suggestions |
+| `tools/orchestra-validate.py` | Validator for `.orchestra/state.md` (header, units table, sections, max 4 running workers) |
+| `hooks/` | Optional Claude Code hooks that enforce the worker rules: report format check and file scope guard. See [hooks/README.md](hooks/README.md) |
+| `tests/` | Stdlib `unittest` suite for the installer, permissions merge, usage report and state validator |
+| `.github/workflows/ci.yml` | CI: tests on Linux, macOS and Windows, plus shellcheck and PSScriptAnalyzer |
 | `docs/token-and-model-optimization.md` | The 7 levers this repo uses to spend fewer tokens and the right model per job |
+
+## What the skill does
+
+- **Resume**: if `.orchestra/state.md` exists, it reads it first and continues from the unfinished wave instead of re-planning.
+- **Cost guard**: before each wave it estimates token spend and asks you first when the wave is large.
+- **Vehicles**: subagents, separate sessions, or Agent Teams (experimental, opt-in, asks before enabling).
+- **Isolation**: native Claude Code worktrees (`claude --worktree`, `EnterWorktree`, or `isolation: "worktree"`).
+- **State**: `.orchestra/state.md` carries a `Wave:` line (for example `2/3`).
 
 ## How it decides
 
@@ -54,6 +66,31 @@ python3 tools/usage-report.py            # tokens per model, cache hit rate, cos
 ```
 
 All the levers, and how to read the report: [docs/token-and-model-optimization.md](docs/token-and-model-optimization.md).
+
+## Testing and CI
+
+The tests use only the Python standard library:
+
+```bash
+python3 -m unittest discover -s tests
+python3 tools/orchestra-validate.py .orchestra/state.md   # validate a state file
+```
+
+CI (`.github/workflows/ci.yml`) runs the suite on Ubuntu, macOS and Windows, plus `shellcheck` on the shell scripts and PSScriptAnalyzer on the PowerShell ones. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Hooks
+
+Optional, Python 3 stdlib only, in [hooks/](hooks/README.md):
+
+- `subagent-report-check.py` (SubagentStop): blocks a worker whose final report lacks a required field or exceeds 10 lines.
+- `scope-guard.py` (PreToolUse, `Edit|Write`): denies edits outside the paths listed in `ORCHESTRA_SCOPE`.
+
+The settings.json snippet and the exact behavior are in [hooks/README.md](hooks/README.md).
+
+## Coming
+
+- Plugin packaging (`.claude-plugin`), in progress. No install command yet.
+- `benchmarks/`: a harness exists on a branch, with no results yet.
 
 ## Install
 
@@ -115,7 +152,7 @@ User-level rules in `~/.cursor/rules/` are not documented by Cursor. If the rule
 
 ## En bref (FR)
 
-Un orchestrateur pour Claude Code et Cursor : il découpe les grosses tâches, choisit combien de workers lancer (0, 1 ou jusqu'à 4), leur donne des consignes courtes et vérifie le résultat. Installation : `./install.sh` sur Linux et macOS, `.\install.ps1` sur Windows. En option, `lean-ctx/setup.sh` compresse les lectures et la sortie du shell, et `tools/usage-report.py` montre où partent vos tokens, modèle par modèle. Adaptez ensuite les deux exemples de `examples/project-skills/` à votre projet.
+Un orchestrateur pour Claude Code et Cursor : il découpe les grosses tâches, choisit combien de workers lancer (0, 1 ou jusqu'à 4), leur donne des consignes courtes et vérifie le résultat. Il reprend un `.orchestra/state.md` existant, estime le coût avant chaque vague, et des hooks optionnels (`hooks/`) font respecter le format des rapports et le périmètre de chaque worker. Installation : `./install.sh` sur Linux et macOS, `.\install.ps1` sur Windows. En option, `lean-ctx/setup.sh` compresse les lectures et la sortie du shell, et `tools/usage-report.py` montre où partent vos tokens, modèle par modèle. Les tests se lancent avec `python3 -m unittest discover -s tests`. Adaptez ensuite les deux exemples de `examples/project-skills/` à votre projet.
 
 ## License
 
