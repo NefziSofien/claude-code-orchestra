@@ -8,6 +8,10 @@ argument-hint: <the big task>
 
 You are the **orchestrator**. Your job is to plan, dispatch, track and verify, not to carry the detail of every unit in your own context. Keep your context small: briefs out, compact reports in.
 
+## Resume (do this first)
+
+At start, if `.orchestra/state.md` exists, read it before anything else. List the units whose status is not `done`, tell the user in one line, and continue from the first unfinished wave (the `Wave:` line) instead of re-decomposing. Re-plan only if the user's new request changes the task.
+
 ## 0. Load project rules first
 
 Before decomposing, check the project's skills (`.claude/skills/`) for an `orchestrate-<project>` skill and any `verify-*` skill. If present, load them: their rules (unit boundaries, waves, brief contents, verification commands) override this skill. Name the relevant project skills in each worker's brief.
@@ -34,6 +38,8 @@ Waves: units whose dependencies are done form the next wave. Re-apply the rule p
 
 **Before dispatching, show the user the plan in 6 lines or fewer** (units, waves, worker count, model per worker) and proceed unless the plan includes something irreversible (push, deploy, migration on a shared DB, deleting data). Then ask first.
 
+**Cost guard:** before each wave, estimate rough token spend per worker (brief + files it reads + output; opus costs several times sonnet or haiku). If the wave looks large, ask the user first and state the estimate. Threshold used here: more than 3 workers on opus, or 4 workers on sonnet each reading many files, or any Agent Teams run. Below it, proceed.
+
 ## 3. Pick the vehicle for each worker
 
 | Unit needs… | Use |
@@ -41,6 +47,9 @@ Waves: units whose dependencies are done form the next wave. Re-apply the rule p
 | A result you need back in this turn (research, audit, locate code, review) | **Subagent**: `Agent` tool, `subagent_type: explorer` / `verifier` |
 | Code edits that are part of this same change | **Subagent**: `Agent`, `subagent_type: implementer`, `isolation: "worktree"` when 2 or more writers run at once |
 | An independent deliverable of its own (own branch / PR, may outlive this turn, user may want to steer it) | **Separate session**: in the Claude desktop app use `start_session` (`context: "fresh"`, own worktree); in the CLI use `Agent` with `isolation: "worktree"` and `run_in_background: true` |
+| Units that must coordinate with each other (share findings, challenge each other, cross-layer changes) and can own disjoint files | **Agent Teams** (experimental): teammates message each other and share a task list. Needs `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in env or settings.json `env`, interactive session only (not `-p`). Higher token cost, no `/resume` of in-process teammates, one team per session. Ask the user before enabling. Otherwise prefer subagents. |
+
+Isolation: use Claude Code's native worktrees. `claude --worktree <name>` starts a session in its own worktree; inside a session use the `EnterWorktree` tool, or `isolation: "worktree"` on `Agent`. Prefer these over hand-made `git worktree` calls.
 
 Never let two writers touch the same files. Read-only workers may share the checkout.
 
@@ -87,6 +96,7 @@ At the project root, create `.orchestra/state.md` and keep it current after ever
 ```markdown
 # Task: <one line>
 Updated: <ISO date-time>
+Wave: <current wave number, e.g. 2/3>
 
 ## Units
 | id | goal | worker | vehicle/model | status | branch/worktree |
