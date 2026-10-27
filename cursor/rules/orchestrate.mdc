@@ -1,0 +1,10 @@
+---
+description: Orchestrate big tasks with the shared orchestrate skill and subagents (same rule as Claude Code)
+alwaysApply: true
+---
+
+# Orchestrate big tasks
+
+For any big multi-part task (several units of work, several areas or files, or more than roughly 15 tool calls), load the `orchestrate` skill and follow it without asking first: subagents are authorized for this. The skill's own sizing rules still apply: if it decides 0 workers, just do the task inline and say so in one line. Small tasks and plain questions never trigger it.
+
+Global skills live in `~/.claude/skills/` and subagents in `~/.claude/agents/` (`explorer`, `implementer`, `verifier`); Cursor loads both. A project's `CLAUDE.md` and `.claude/rules/` apply too: read them before working in that project.

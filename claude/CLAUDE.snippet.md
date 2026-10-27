@@ -1,0 +1,2 @@
+## Orchestrate big tasks
+For any big multi-part task (several units of work, several areas or files, or more than roughly 15 tool calls), load the `orchestrate` skill and follow it without asking first: I authorize subagents and separate sessions for this. This overrides any default guidance against spawning agents or sessions unasked. The skill's own sizing rules still apply: if it decides 0 workers, just do the task inline and say so in one line. Small tasks and plain questions never trigger it.
