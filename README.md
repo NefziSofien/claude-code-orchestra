@@ -1,5 +1,7 @@
 # claude-code-orchestra
 
+**English** | [Français](README.fr.md)
+
 An orchestrator for big coding tasks in **Claude Code** and **Cursor**.
 
 Give your agent a large task and it stops doing everything alone: it splits the work into units, decides how many workers to run (none, one, or up to 4 in parallel), hands each a short brief, and verifies the combined result before handing back.
@@ -150,9 +152,9 @@ User-level rules in `~/.cursor/rules/` are not documented by Cursor. If the rule
 - Workers never commit or push unless the brief says so; worktree branches are merged only with your approval.
 - The `verifier` never edits files, and the example `verify-package` lists commands that must never run as checks (e2e, migrations, deploys).
 
-## En bref (FR)
+## En français
 
-Un orchestrateur pour Claude Code et Cursor : il découpe les grosses tâches, choisit combien de workers lancer (0, 1 ou jusqu'à 4), leur donne des consignes courtes et vérifie le résultat. Il reprend un `.orchestra/state.md` existant, estime le coût avant chaque vague, et des hooks optionnels (`hooks/`) font respecter le format des rapports et le périmètre de chaque worker. Installation : `./install.sh` sur Linux et macOS, `.\install.ps1` sur Windows. En option, `lean-ctx/setup.sh` compresse les lectures et la sortie du shell, et `tools/usage-report.py` montre où partent vos tokens, modèle par modèle. Les tests se lancent avec `python3 -m unittest discover -s tests`. Adaptez ensuite les deux exemples de `examples/project-skills/` à votre projet.
+Version française complète : [README.fr.md](README.fr.md).
 
 ## License
 
