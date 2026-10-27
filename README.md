@@ -26,7 +26,9 @@ flowchart LR
 | `claude/CLAUDE.snippet.md` | Optional rule that triggers orchestration automatically on big tasks |
 | `cursor/` | The same rule and read-only agent copies for Cursor |
 | `examples/project-skills/` | Two templates for per-project rules: waves per package, and verification commands |
-| `docs/shell-hardening.md` | Optional: let background workers run safe commands without prompts, and refuse the rest |
+| `lean-ctx/` | Optional, recommended: [lean-ctx](https://github.com/yvgude/lean-ctx) setup that compresses reads and shell output, plus a locked-down shell so workers run safe commands without prompts and are refused the rest |
+| `tools/usage-report.py` | Token and model usage report from your local transcripts: tokens per model, cache hit rate, costliest projects and tools, suggestions |
+| `docs/token-and-model-optimization.md` | The 7 levers this repo uses to spend fewer tokens and the right model per job |
 
 ## How it decides
 
@@ -42,6 +44,16 @@ The main lesson so far: the gain does not come from parallelism, it comes from k
 - Each worker returns a report of 10 lines max, in a fixed format.
 - Progress lives in `.orchestra/state.md` (excluded from git), so nothing is lost when the conversation gets compacted.
 - Writers never share files: a git worktree per writer, or one repo per writer in multi-repo workspaces.
+
+## Spending fewer tokens
+
+Each job goes to the cheapest model that can do it: searches on Haiku (`explorer`), checks on Sonnet (`verifier`), design and contracts on the strongest model. On top of that, [lean-ctx](lean-ctx/README.md) compresses file reads and command output, and the report shows where your tokens actually go:
+
+```bash
+python3 tools/usage-report.py            # tokens per model, cache hit rate, costliest projects and tools
+```
+
+All the levers, and how to read the report: [docs/token-and-model-optimization.md](docs/token-and-model-optimization.md).
 
 ## Install
 
@@ -68,6 +80,10 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 Files are **copied** by default, because Windows only allows symlinks with Developer Mode on or from an admin shell; rerun the installer after `git pull` to update. Options: `-Link` (symlink, falls back to copy if Windows refuses), `-NoCursor`, `-WithClaudeMd`, `-DryRun`. Works with Windows PowerShell 5.1 and PowerShell 7. From Git Bash or WSL you can also use `install.sh`.
+
+### Optional: lean-ctx
+
+Install lean-ctx, then run `./lean-ctx/setup.sh` (or `.\lean-ctx\setup.ps1` on Windows) with `--dry-run` / `-DryRun` first. Details in [lean-ctx/README.md](lean-ctx/README.md).
 
 ### Then
 
@@ -99,7 +115,7 @@ User-level rules in `~/.cursor/rules/` are not documented by Cursor. If the rule
 
 ## En bref (FR)
 
-Un orchestrateur pour Claude Code et Cursor : il découpe les grosses tâches, choisit combien de workers lancer (0, 1 ou jusqu'à 4), leur donne des consignes courtes et vérifie le résultat. Installation : `./install.sh` sur Linux et macOS, `.\install.ps1` sur Windows. Adaptez ensuite les deux exemples de `examples/project-skills/` à votre projet.
+Un orchestrateur pour Claude Code et Cursor : il découpe les grosses tâches, choisit combien de workers lancer (0, 1 ou jusqu'à 4), leur donne des consignes courtes et vérifie le résultat. Installation : `./install.sh` sur Linux et macOS, `.\install.ps1` sur Windows. En option, `lean-ctx/setup.sh` compresse les lectures et la sortie du shell, et `tools/usage-report.py` montre où partent vos tokens, modèle par modèle. Adaptez ensuite les deux exemples de `examples/project-skills/` à votre projet.
 
 ## License
 
