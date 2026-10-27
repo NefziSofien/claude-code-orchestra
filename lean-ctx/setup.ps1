@@ -3,6 +3,8 @@
 #
 #   powershell -ExecutionPolicy Bypass -File .\lean-ctx\setup.ps1 [-Privacy] [-DryRun]
 
+# Interactive setup: console status lines, so Write-Host is intended.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
 [CmdletBinding()]
 param(
     [switch]$Privacy,

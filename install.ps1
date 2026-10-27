@@ -4,6 +4,8 @@
 #
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1 [-Link] [-NoCursor] [-WithClaudeMd] [-DryRun]
 
+# Interactive installer: colorless console status lines, so Write-Host is intended.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
 [CmdletBinding()]
 param(
     [switch]$Link,
