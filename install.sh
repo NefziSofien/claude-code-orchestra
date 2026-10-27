@@ -16,7 +16,7 @@ Existing files are backed up as <file>.bak-<timestamp> before being replaced.
 EOF
 }
 
-MODE=link
+MODE="link"
 CURSOR=auto
 CLAUDE_MD=no
 DRY=no
@@ -71,7 +71,8 @@ if [ "$CLAUDE_MD" = yes ]; then
   elif [ "$DRY" = yes ]; then
     echo "  [dry-run] append claude/CLAUDE.snippet.md to $CLAUDE_DIR/CLAUDE.md"
   else
-    { [ -s "$CLAUDE_DIR/CLAUDE.md" ] && echo; cat "$REPO/claude/CLAUDE.snippet.md"; } >> "$CLAUDE_DIR/CLAUDE.md"
+    if [ -s "$CLAUDE_DIR/CLAUDE.md" ]; then echo >> "$CLAUDE_DIR/CLAUDE.md"; fi
+    cat "$REPO/claude/CLAUDE.snippet.md" >> "$CLAUDE_DIR/CLAUDE.md"
     echo "  append   $CLAUDE_DIR/CLAUDE.md"
   fi
 fi

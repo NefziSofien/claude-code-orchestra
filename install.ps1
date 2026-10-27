@@ -6,6 +6,8 @@
 
 # Interactive installer: colorless console status lines, so Write-Host is intended.
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
+# $Link is read inside functions, which the analyzer does not follow.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Link')]
 [CmdletBinding()]
 param(
     [switch]$Link,
