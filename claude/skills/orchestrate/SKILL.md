@@ -51,6 +51,8 @@ Waves: units whose dependencies are done form the next wave. Re-apply the rule p
 
 Isolation: use Claude Code's native worktrees. `claude --worktree <name>` starts a session in its own worktree; inside a session use the `EnterWorktree` tool, or `isolation: "worktree"` on `Agent`. Prefer these over hand-made `git worktree` calls.
 
+**Desktop app default:** when two or more writers each produce a change of their own (own files, own branch), start each as a session with `start_session` (`context: "fresh"`, own worktree, a clear title) so the user sees them in the sidebar and can open, steer or stop them. Keep subagents for read-only work and for units whose result you need back inside this turn. Record each session's name and branch in `.orchestra/state.md`, and ask before merging its branch.
+
 Never let two writers touch the same files. Read-only workers may share the checkout.
 
 `isolation: "worktree"` only works when the working directory is a git repo. In a non-git workspace that holds several repos (for example one folder per package), isolate by scoping each writer to one repo folder; two writers in the same repo run in sequence, or each gets its own session started inside that repo.

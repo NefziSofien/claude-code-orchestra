@@ -38,7 +38,7 @@ flowchart LR
 
 - **Resume**: if `.orchestra/state.md` exists, it reads it first and continues from the unfinished wave instead of re-planning.
 - **Cost guard**: before each wave it estimates token spend and asks you first when the wave is large.
-- **Vehicles**: subagents, separate sessions, or Agent Teams (experimental, opt-in, asks before enabling).
+- **Vehicles**: subagents, separate sessions, or Agent Teams (experimental, opt-in, asks before enabling). In the Claude desktop app, parallel writers start as sessions you can see in the sidebar.
 - **Isolation**: native Claude Code worktrees (`claude --worktree`, `EnterWorktree`, or `isolation: "worktree"`).
 - **State**: `.orchestra/state.md` carries a `Wave:` line (for example `2/3`).
 
@@ -90,7 +90,7 @@ The settings.json snippet and the exact behavior are in [hooks/README.md](hooks/
 ## Coming
 
 - Plugin packaging (`.claude-plugin`), in progress. No install command yet.
-- `benchmarks/`: a harness exists on a branch, with no results yet.
+- `benchmarks/`: task fixtures and checks are in the repo; the harness exists on a branch, with no results yet.
 
 ## Install
 

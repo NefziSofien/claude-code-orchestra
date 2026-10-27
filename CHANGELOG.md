@@ -12,6 +12,12 @@ All notable changes to this project are documented here. The format follows [Kee
 - `hooks/`: `subagent-report-check.py` (report format) and `scope-guard.py` (file scope), with a README.
 - `CONTRIBUTING.md`, issue templates and this changelog.
 
+- Orchestrate skill: in the desktop app, parallel writers start as visible sessions (sidebar) instead of hidden subagents.
+- `benchmarks/fixtures/` and `benchmarks/checks/`: task fixtures and pass checks (harness still pending).
+
+### Fixed
+- shellcheck and PSScriptAnalyzer findings in `install.sh` and `install.ps1`.
+
 ### Changed
 - `tools/usage-report.py` split into functions so it can be tested.
 
