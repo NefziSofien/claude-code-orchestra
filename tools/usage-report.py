@@ -63,133 +63,183 @@ def project_name(slug):
     return name if len(name) <= 48 else name[:22] + "..." + name[-23:]
 
 
-def main():
-    args = parse_args()
-    files = glob.glob(os.path.join(args.projects_dir, "**", "*.jsonl"), recursive=True)
-    if not files:
-        print(f"No transcripts found in {args.projects_dir}", file=sys.stderr)
-        return 1
-    since = None
-    if args.days:
-        since = datetime.now(timezone.utc) - timedelta(days=args.days)
-        files = [f for f in files if datetime.fromtimestamp(os.path.getmtime(f), timezone.utc) >= since]
+USAGE_FIELDS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")
 
-    per_model = defaultdict(Counter)
-    per_project = Counter()
-    tools, mcp_servers, skills, agents, bash = Counter(), Counter(), Counter(), Counter(), Counter()
-    sidechain_out = main_out = 0
-    seen_requests = set()
-    sessions = set()
 
+class Stats:
+    """Everything aggregated from the transcripts."""
+
+    def __init__(self):
+        self.per_model = defaultdict(Counter)
+        self.per_project = Counter()
+        self.tools, self.mcp_servers, self.skills, self.agents, self.bash = (Counter() for _ in range(5))
+        self.sidechain_out = 0
+        self.seen_requests = set()
+        self.sessions = set()
+
+
+def find_transcripts(projects_dir):
+    return glob.glob(os.path.join(projects_dir, "**", "*.jsonl"), recursive=True)
+
+
+def filter_recent(files, days):
+    """Return (files, since): transcripts modified within `days` days (0 = all)."""
+    if not days:
+        return files, None
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    return [f for f in files if datetime.fromtimestamp(os.path.getmtime(f), timezone.utc) >= since], since
+
+
+def read_records(path):
+    """Yield the JSON objects of a transcript, skipping lines that are not valid JSON."""
+    with open(path, encoding="utf-8", errors="ignore") as fh:
+        for line in fh:
+            try:
+                yield json.loads(line)
+            except ValueError:
+                continue
+
+
+def is_before(record, since):
+    if not since or not record.get("timestamp"):
+        return False
+    try:
+        return datetime.fromisoformat(record["timestamp"].replace("Z", "+00:00")) < since
+    except ValueError:
+        return False
+
+
+def count_tool_use(block, stats):
+    name = block.get("name", "")
+    inp = block.get("input") or {}
+    stats.tools[name] += 1
+    if name.startswith("mcp__"):
+        stats.mcp_servers[name.split("__")[1]] += 1
+    elif name == "Skill":
+        stats.skills[inp.get("skill", "?")] += 1
+    elif name in ("Agent", "Task"):
+        stats.agents[f"{inp.get('subagent_type', 'general-purpose')} ({inp.get('model', 'default')})"] += 1
+    elif name == "Bash":
+        stats.bash.update(command_heads(inp.get("command", "")))
+
+
+def count_usage(record, msg, project, stats):
+    # One API response is split across several lines; count its usage once.
+    key = record.get("requestId") or msg.get("id")
+    usage = msg.get("usage")
+    model = msg.get("model")
+    if not usage or not model or model.startswith("<") or key in stats.seen_requests:
+        return
+    stats.seen_requests.add(key)
+    u = stats.per_model[model]
+    u["requests"] += 1
+    for field in USAGE_FIELDS:
+        u[field] += usage.get(field) or 0
+    stats.per_project[project] += sum(usage.get(f) or 0 for f in USAGE_FIELDS)
+    if record.get("isSidechain"):
+        stats.sidechain_out += usage.get("output_tokens") or 0
+
+
+def add_record(record, project, since, stats):
+    if record.get("type") != "assistant" or is_before(record, since):
+        return
+    stats.sessions.add(record.get("sessionId"))
+    msg = record.get("message") or {}
+    for block in msg.get("content") or []:
+        if isinstance(block, dict) and block.get("type") == "tool_use":
+            count_tool_use(block, stats)
+    count_usage(record, msg, project, stats)
+
+
+def aggregate(files, projects_dir, since):
+    stats = Stats()
     for path in files:
-        project = project_name(os.path.relpath(path, args.projects_dir).split(os.sep)[0])
-        with open(path, encoding="utf-8", errors="ignore") as fh:
-            for line in fh:
-                try:
-                    o = json.loads(line)
-                except ValueError:
-                    continue
-                if o.get("type") != "assistant":
-                    continue
-                if since and o.get("timestamp"):
-                    try:
-                        if datetime.fromisoformat(o["timestamp"].replace("Z", "+00:00")) < since:
-                            continue
-                    except ValueError:
-                        pass
-                sessions.add(o.get("sessionId"))
-                msg = o.get("message") or {}
-                for block in msg.get("content") or []:
-                    if not isinstance(block, dict) or block.get("type") != "tool_use":
-                        continue
-                    name = block.get("name", "")
-                    inp = block.get("input") or {}
-                    tools[name] += 1
-                    if name.startswith("mcp__"):
-                        mcp_servers[name.split("__")[1]] += 1
-                    elif name == "Skill":
-                        skills[inp.get("skill", "?")] += 1
-                    elif name in ("Agent", "Task"):
-                        agents[f"{inp.get('subagent_type', 'general-purpose')} ({inp.get('model', 'default')})"] += 1
-                    elif name == "Bash":
-                        bash.update(command_heads(inp.get("command", "")))
-                # One API response is split across several lines; count its usage once.
-                key = o.get("requestId") or msg.get("id")
-                usage = msg.get("usage")
-                model = msg.get("model")
-                if not usage or not model or model.startswith("<") or key in seen_requests:
-                    continue
-                seen_requests.add(key)
-                u = per_model[model]
-                u["requests"] += 1
-                for field in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens"):
-                    u[field] += usage.get(field) or 0
-                total = sum(usage.get(f) or 0 for f in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens"))
-                per_project[project] += total
-                if o.get("isSidechain"):
-                    sidechain_out += usage.get("output_tokens") or 0
-                else:
-                    main_out += usage.get("output_tokens") or 0
+        project = project_name(os.path.relpath(path, projects_dir).split(os.sep)[0])
+        for record in read_records(path):
+            add_record(record, project, since, stats)
+    return stats
 
+
+def summarize(stats):
+    """Derived numbers: (prompt tokens, cache read rate, total output tokens or 1)."""
     totals = Counter()
-    for u in per_model.values():
+    for u in stats.per_model.values():
         totals.update(u)
     prompt = totals["input_tokens"] + totals["cache_creation_input_tokens"] + totals["cache_read_input_tokens"]
     cache_rate = totals["cache_read_input_tokens"] / prompt if prompt else 0
-    out_total = totals["output_tokens"] or 1
+    return prompt, cache_rate, totals["output_tokens"] or 1
 
-    if args.json:
-        print(json.dumps({
-            "files": len(files), "sessions": len(sessions), "models": per_model, "projects": per_project,
-            "cache_read_rate": cache_rate, "subagent_output_share": sidechain_out / out_total,
-            "tools": tools, "mcp_servers": mcp_servers, "skills": skills, "agents": agents, "bash": bash,
-        }, indent=2, default=dict))
-        return 0
 
-    period = f"last {args.days} days" if args.days else "all time"
-    print(f"Claude Code usage, {period}: {len(sessions)} sessions, {len(files)} transcript files\n")
-    print(f"{'Model':<28}{'requests':>10}{'input':>10}{'cache write':>13}{'cache read':>12}{'output':>10}{'output %':>10}")
-    for model, u in sorted(per_model.items(), key=lambda kv: -kv[1]["output_tokens"]):
-        print(f"{model:<28}{u['requests']:>10}{fmt(u['input_tokens']):>10}{fmt(u['cache_creation_input_tokens']):>13}"
-              f"{fmt(u['cache_read_input_tokens']):>12}{fmt(u['output_tokens']):>10}{u['output_tokens'] / out_total:>10.0%}")
-    print(f"\nCache read rate: {cache_rate:.0%} of prompt tokens came from the cache")
-    print(f"Subagents: {sidechain_out / out_total:.0%} of output tokens")
+def render_json(stats, n_files, cache_rate, out_total):
+    return json.dumps({
+        "files": n_files, "sessions": len(stats.sessions), "models": stats.per_model, "projects": stats.per_project,
+        "cache_read_rate": cache_rate, "subagent_output_share": stats.sidechain_out / out_total,
+        "tools": stats.tools, "mcp_servers": stats.mcp_servers, "skills": stats.skills, "agents": stats.agents,
+        "bash": stats.bash,
+    }, indent=2, default=dict)
 
-    def top(title, counter, n=8):
-        if counter:
-            print(f"\n{title}")
-            for name, count in counter.most_common(n):
-                print(f"  {count:>6}  {name}")
 
-    print("\nProjects by tokens")
-    for name, count in per_project.most_common(8):
-        print(f"  {fmt(count):>8}  {name}")
-    top("Tools", tools)
-    top("MCP servers", mcp_servers)
-    top("Skills", skills)
-    top("Subagents (type, model)", agents)
-    top("Shell commands", bash)
+def render_top(title, counter, n=8):
+    if not counter:
+        return []
+    return ["", title] + [f"  {count:>6}  {name}" for name, count in counter.most_common(n)]
 
+
+def make_tips(stats, prompt, cache_rate, out_total):
     tips = []
-    if per_model:
-        big = max(per_model.items(), key=lambda kv: kv[1]["output_tokens"])
-        cheap = [m for m in per_model if "haiku" in m]
+    if stats.per_model:
+        big = max(stats.per_model.items(), key=lambda kv: kv[1]["output_tokens"])
+        cheap = [m for m in stats.per_model if "haiku" in m]
         if "opus" in big[0] and big[1]["output_tokens"] / out_total > 0.6 and not cheap:
             tips.append(f"{big[0]} produces {big[1]['output_tokens'] / out_total:.0%} of output and no Haiku is used: "
                         "send searches and file mapping to the `explorer` agent (Haiku).")
     if prompt and cache_rate < 0.5:
         tips.append("Under half of prompt tokens hit the cache: keep CLAUDE.md and the tool set stable during a session, "
                     "and avoid restarting long sessions.")
-    if not agents and len(sessions) > 10:
+    if not stats.agents and len(stats.sessions) > 10:
         tips.append("No subagents used: big tasks run in one growing context. Try the `orchestrate` skill.")
-    if mcp_servers and "lean-ctx" not in mcp_servers:
+    if stats.mcp_servers and "lean-ctx" not in stats.mcp_servers:
         tips.append("lean-ctx is not used: file reads and shell output go to the model uncompressed (see lean-ctx/README.md).")
     tips.append("Pre-allow the read-only commands and MCP tools you use most (Claude Code's /fewer-permission-prompts) "
                 "so background workers never stall on a permission prompt.")
     tips.append("Disable plugins and MCP servers you never use: their tool lists load into every session and every worker.")
-    print("\nSuggestions")
-    for t in tips:
-        print(f"  - {t}")
+    return tips
+
+
+def render_text(stats, days, n_files, prompt, cache_rate, out_total):
+    period = f"last {days} days" if days else "all time"
+    out = [f"Claude Code usage, {period}: {len(stats.sessions)} sessions, {n_files} transcript files\n",
+           f"{'Model':<28}{'requests':>10}{'input':>10}{'cache write':>13}{'cache read':>12}{'output':>10}{'output %':>10}"]
+    for model, u in sorted(stats.per_model.items(), key=lambda kv: -kv[1]["output_tokens"]):
+        out.append(f"{model:<28}{u['requests']:>10}{fmt(u['input_tokens']):>10}{fmt(u['cache_creation_input_tokens']):>13}"
+                   f"{fmt(u['cache_read_input_tokens']):>12}{fmt(u['output_tokens']):>10}{u['output_tokens'] / out_total:>10.0%}")
+    out.append(f"\nCache read rate: {cache_rate:.0%} of prompt tokens came from the cache")
+    out.append(f"Subagents: {stats.sidechain_out / out_total:.0%} of output tokens")
+    out += ["", "Projects by tokens"]
+    out += [f"  {fmt(count):>8}  {name}" for name, count in stats.per_project.most_common(8)]
+    out += render_top("Tools", stats.tools)
+    out += render_top("MCP servers", stats.mcp_servers)
+    out += render_top("Skills", stats.skills)
+    out += render_top("Subagents (type, model)", stats.agents)
+    out += render_top("Shell commands", stats.bash)
+    out += ["", "Suggestions"]
+    out += [f"  - {t}" for t in make_tips(stats, prompt, cache_rate, out_total)]
+    return "\n".join(out)
+
+
+def main():
+    args = parse_args()
+    files = find_transcripts(args.projects_dir)
+    if not files:
+        print(f"No transcripts found in {args.projects_dir}", file=sys.stderr)
+        return 1
+    files, since = filter_recent(files, args.days)
+    stats = aggregate(files, args.projects_dir, since)
+    prompt, cache_rate, out_total = summarize(stats)
+    if args.json:
+        print(render_json(stats, len(files), cache_rate, out_total))
+    else:
+        print(render_text(stats, args.days, len(files), prompt, cache_rate, out_total))
     return 0
 
 
